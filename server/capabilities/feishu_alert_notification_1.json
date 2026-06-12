@@ -1,0 +1,53 @@
+{
+  "id": "feishu_alert_notification_1",
+  "pluginKey": "@official-plugins/send-feishu-message",
+  "pluginVersion": "1.0.29",
+  "name": "飞书预警通知",
+  "description": "发送模型预警通知到飞书，消息标题包含预警级别和模型名称，正文展示预警详情和分析内容。",
+  "icon": "",
+  "paramsSchema": {
+    "type": "object",
+    "properties": {
+      "analysis_content": {
+        "type": "string",
+        "description": "预警分析内容"
+      },
+      "receiver_users": {
+        "type": "array",
+        "description": "接收预警通知的用户ID列表",
+        "items": {
+          "type": "string",
+          "description": "用户ID"
+        }
+      },
+      "alert_level": {
+        "type": "string",
+        "description": "预警级别（如：严重、警告、提示）"
+      },
+      "model_name": {
+        "type": "string",
+        "description": "触发预警的模型名称"
+      },
+      "alert_details": {
+        "description": "预警详情内容",
+        "type": "string"
+      }
+    },
+    "required": [
+      "alert_level",
+      "model_name",
+      "alert_details",
+      "analysis_content"
+    ]
+  },
+  "formValue": {
+    "content": "### 预警详情\n{{input.alert_details}}\n\n### 分析内容\n{{input.analysis_content}}",
+    "receiverUserList": "{{input.receiver_users}}",
+    "sender": "bot",
+    "buttons": [],
+    "title": "{{input.alert_level}} {{input.model_name}} 预警通知"
+  },
+  "createdAt": 1781149440594,
+  "updatedAt": 1781149440594,
+  "createdBy": 6882567737378373634
+}
