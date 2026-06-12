@@ -60,6 +60,7 @@ export interface ModelListResponse {
 export interface CallQualityMetrics {
   successRate: number;
   failureRate: number;
+  totalCalls: number;
   trend: Array<{ timestamp: string; successRate: number; failureRate: number }>;
 }
 
@@ -77,14 +78,7 @@ export interface TokenStatistics {
   dailyTrend: Array<{ date: string; input: number; output: number }>;
 }
 
-export interface ThroughputMetrics {
-  current: number;
-  trend: TrendPoint[];
-}
-
 export interface ResourceUsage {
-  cpu: number;
-  memory: number;
   gpu: number;
   gpuMemory: number;
 }
@@ -93,7 +87,6 @@ export interface ModelMetricsResponse {
   callQuality: CallQualityMetrics;
   latencyMetrics: LatencyMetrics;
   tokenStatistics: TokenStatistics;
-  throughput: ThroughputMetrics;
   resourceUsage: ResourceUsage;
 }
 

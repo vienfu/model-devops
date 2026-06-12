@@ -59,7 +59,7 @@ const ModelList: React.FC<ModelListProps> = ({
                     : 'hover:bg-accent/50'
                 }`}
               >
-                <div className="mb-1 flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">
                     {m.name}
                   </span>
@@ -70,26 +70,6 @@ const ModelList: React.FC<ModelListProps> = ({
                         : 'bg-gray-400'
                     }`}
                   />
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <span>
-                    调用{' '}
-                    <span className="font-mono">
-                      {m.apiCalls.toLocaleString()}
-                    </span>
-                  </span>
-                  <span>
-                    成功率{' '}
-                    <span className="font-mono">
-                      {m.successRate}%
-                    </span>
-                  </span>
-                  <span>
-                    延时{' '}
-                    <span className="font-mono">
-                      {m.avgLatency}ms
-                    </span>
-                  </span>
                 </div>
               </div>
             ))}

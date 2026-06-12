@@ -4,7 +4,7 @@ import {
   type PostgresJsDatabase,
 } from '@lark-apaas/fullstack-nestjs-core';
 import { model, metricData } from '@server/database/schema';
-import { eq, ilike, and, gte, lt } from 'drizzle-orm';
+import { eq, ilike, and, gte, lt, isNull } from 'drizzle-orm';
 import type {
   ModelListResponse,
   ModelMetricsResponse,
@@ -35,8 +35,10 @@ export class ModelsService {
     for (const [key, points] of Object.entries(series)) {
       points.sort((a, b) => a.ts - b.ts);
       let delta = 0;
-      for (let i = 1; i < points.length; i++) {
-        const diff = points[i].val - points[i - 1].val;
+      // 首点也计入：从 0 基线起累加（与 Dashboard 一致）
+      for (let i = 0; i < points.length; i++) {
+        const prev = i === 0 ? 0 : points[i - 1].val;
+        const diff = points[i].val - prev;
         delta += diff >= 0 ? diff : points[i].val;
       }
       deltas[key] = delta;
@@ -63,8 +65,10 @@ export class ModelsService {
     }> = [];
     for (const [metricType, points] of Object.entries(series)) {
       points.sort((a, b) => a.ts - b.ts);
-      for (let i = 1; i < points.length; i++) {
-        const diff = points[i].val - points[i - 1].val;
+      // 首点视为从 0 基线起的 delta（与 Dashboard 一致），避免「首次同步无趋势」
+      for (let i = 0; i < points.length; i++) {
+        const prev = i === 0 ? 0 : points[i - 1].val;
+        const diff = points[i].val - prev;
         const delta = diff >= 0 ? diff : points[i].val;
         deltaPoints.push({ metricType, ts: points[i].ts, delta });
       }
@@ -186,9 +190,15 @@ export class ModelsService {
 
     const totals = this.computeCounterDeltas(metricRows);
     const bucketMap = this.computeBucketedCounterDeltas(metricRows, bucketSec);
-    const sortedBuckets = [...bucketMap.entries()].sort(
-      ([a], [b]) => a - b,
-    );
+    // 按 start/end/bucketSec 构造完整桶序列，缺失桶用空对象兜底，
+    // 让前端横轴显示完整时间窗，而不是只画有数据的几个点。
+    const bucketMs = bucketSec * 1000;
+    const firstBucket = Math.floor(start.getTime() / bucketMs) * bucketMs;
+    const lastBucket = Math.floor((end.getTime() - 1) / bucketMs) * bucketMs;
+    const sortedBuckets: Array<[number, Record<string, number>]> = [];
+    for (let ts = firstBucket; ts <= lastBucket; ts += bucketMs) {
+      sortedBuckets.push([ts, bucketMap.get(ts) ?? {}]);
+    }
 
     const successTotal = totals['success_calls_total'] ?? 0;
     const failTotal = totals['fail_calls_total'] ?? 0;
@@ -266,19 +276,6 @@ export class ModelsService {
       output: Math.round(m['generation_tokens_total'] ?? 0),
     }));
 
-    const rangeSec = (end.getTime() - start.getTime()) / 1000;
-    const currentThroughput =
-      rangeSec > 0
-        ? (totals['generation_tokens_total'] ?? 0) / rangeSec
-        : 0;
-
-    const throughputTrend = sortedBuckets.map(([ts, m]) => ({
-      timestamp: new Date(ts).toISOString(),
-      value: Number(
-        ((m['generation_tokens_total'] ?? 0) / bucketSec).toFixed(1),
-      ),
-    }));
-
     const globalRows = await this.db
       .select({
         metricType: metricData.metricType,
@@ -287,7 +284,7 @@ export class ModelsService {
       .from(metricData)
       .where(
         and(
-          eq(metricData.modelId, null as unknown as string),
+          isNull(metricData.modelId),
           gte(metricData.recordedAt, start),
           lt(metricData.recordedAt, end),
         ),
@@ -311,6 +308,7 @@ export class ModelsService {
       callQuality: {
         successRate: Number(successRate.toFixed(2)),
         failureRate: Number((100 - successRate).toFixed(2)),
+        totalCalls: Math.round(total),
         trend: callQualityTrend,
       },
       latencyMetrics: {
@@ -325,13 +323,7 @@ export class ModelsService {
         totalOutput,
         dailyTrend,
       },
-      throughput: {
-        current: Number(currentThroughput.toFixed(1)),
-        trend: throughputTrend,
-      },
       resourceUsage: {
-        cpu: 0,
-        memory: 0,
         gpu: Number(gpuUtil.toFixed(1)),
         gpuMemory: Number(gpuMemPercent.toFixed(1)),
       },
