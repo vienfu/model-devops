@@ -51,6 +51,7 @@ export interface ModelListItem {
   apiCalls: number;
   successRate: number;
   avgLatency: number;
+  pods: string[];
 }
 
 export interface ModelListResponse {
@@ -79,8 +80,14 @@ export interface TokenStatistics {
 }
 
 export interface ResourceUsage {
-  gpu: number;
-  gpuMemory: number;
+  /** 显存使用率：used / allocated × 100 */
+  memoryAllocatedPercent: number;
+  /** 已使用显存（bytes） */
+  memoryUsedBytes: number;
+  /** 已分配显存（bytes） */
+  memoryAllocatedBytes: number;
+  /** 算力利用率（%，0-100），多卡取平均 */
+  computePercent: number;
 }
 
 export interface ModelMetricsResponse {

@@ -75,12 +75,6 @@ const PER_MODEL_QUERIES: Array<{ metricType: string; queryTemplate: string }> = 
   },
 ];
 
-const GLOBAL_QUERIES: Array<{ metricType: string; query: string }> = [
-  { metricType: 'gpu_util', query: 'avg(DCGM_FI_DEV_GPU_UTIL)' },
-  { metricType: 'gpu_mem_used', query: 'sum(DCGM_FI_DEV_FB_USED)' },
-  { metricType: 'gpu_mem_free', query: 'sum(DCGM_FI_DEV_FB_FREE)' },
-];
-
 const RETRY_COUNT = 1;
 const RETRY_DELAY_MS = 3000;
 
@@ -207,26 +201,8 @@ export class MetricSyncService {
       );
     }
 
-    const globalRows: Array<{ metricType: string; value: string }> = [];
-    for (const { metricType, query } of GLOBAL_QUERIES) {
-      const val = await this.retryGetScalar(query, 0);
-      if (val > 0) {
-        globalRows.push({ metricType, value: String(val) });
-      }
-    }
-
-    if (globalRows.length > 0) {
-      await this.db.insert(metricData).values(
-        globalRows.map((r) => ({
-          modelId: null as unknown as string,
-          metricType: r.metricType,
-          value: r.value,
-        })),
-      );
-    }
-
     this.logger.log(
-      `Synced ${String(allRows.length)} model rows, ${String(globalRows.length)} global rows`,
+      `Synced ${String(allRows.length)} model rows`,
     );
   }
 

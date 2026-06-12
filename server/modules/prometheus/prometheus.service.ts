@@ -151,6 +151,97 @@ export class PrometheusService {
       .filter(Boolean);
   }
 
+  /**
+   * 查询每个 model_name 对应的 Pod 名称集合。
+   * 使用 vllm:num_requests_running（gauge，常驻指标，空闲时也存在）。
+   * 通过 (model_name, podName) 分组聚合保留 label。
+   * 注意：vLLM Helm 部署使用的标签名是 `podName` 而非 k8s 默认的 `pod`。
+   */
+  async getModelPods(): Promise<Record<string, string[]>> {
+    const results = await this.instantQuery(
+      'group by (model_name, podName) (vllm:num_requests_running)',
+    );
+    const out: Record<string, Set<string>> = {};
+    for (const r of results) {
+      const name = r.metric.model_name;
+      const pod = r.metric.podName;
+      if (!name || !pod) continue;
+      if (!out[name]) out[name] = new Set();
+      out[name].add(pod);
+    }
+    const ret: Record<string, string[]> = {};
+    for (const k of Object.keys(out)) {
+      ret[k] = Array.from(out[k]).sort();
+    }
+    return ret;
+  }
+
+  /**
+   * 查询所有 Pod 的 vGPU 显存分配 / 使用量（按 podName 聚合，单位均为 bytes）。
+   *
+   * 数据来源：
+   * - 分配量：volcano_vgpu_device_memory_allocation_for_a_certain_pod（label: podName，单位 Gi）
+   * - 使用量：vGPU_device_memory_usage_in_bytes（label: podname，单位 bytes）
+   *
+   * 注意 label 大小写不一致：volcano_* 用 `podName`（驼峰），vGPU_* 用 `podname`（小写）。
+   */
+  async getPodGpuMemory(): Promise<
+    Record<string, { allocatedBytes: number; usedBytes: number }>
+  > {
+    const GIB = 1024 * 1024 * 1024;
+
+    const [allocResults, usageResults] = await Promise.all([
+      this.instantQuery(
+        'sum by (podName) (volcano_vgpu_device_memory_allocation_for_a_certain_pod)',
+      ),
+      this.instantQuery(
+        'sum by (podname) (vGPU_device_memory_usage_in_bytes)',
+      ),
+    ]);
+
+    const out: Record<string, { allocatedBytes: number; usedBytes: number }> =
+      {};
+    const ensure = (pod: string) => {
+      if (!out[pod]) out[pod] = { allocatedBytes: 0, usedBytes: 0 };
+      return out[pod];
+    };
+
+    for (const r of allocResults) {
+      const pod = r.metric.podName;
+      if (!pod) continue;
+      const valGi = parseFloat(r.value[1]);
+      if (isNaN(valGi)) continue;
+      ensure(pod).allocatedBytes += valGi * GIB;
+    }
+    for (const r of usageResults) {
+      const pod = r.metric.podname;
+      if (!pod) continue;
+      const valBytes = parseFloat(r.value[1]);
+      if (isNaN(valBytes)) continue;
+      ensure(pod).usedBytes += valBytes;
+    }
+    return out;
+  }
+
+  /**
+   * 查询每个 Pod 的算力利用率（按 podname 聚合，多卡取平均，单位 %）。
+   * 数据来源：Device_utilization_desc_of_container（label: podname，单卡 0-100）
+   */
+  async getPodGpuUtilization(): Promise<Record<string, number>> {
+    const results = await this.instantQuery(
+      'avg by (podname) (Device_utilization_desc_of_container)',
+    );
+    const out: Record<string, number> = {};
+    for (const r of results) {
+      const pod = r.metric.podname;
+      if (!pod) continue;
+      const val = parseFloat(r.value[1]);
+      if (isNaN(val)) continue;
+      out[pod] = val;
+    }
+    return out;
+  }
+
   extractRangeValues(
     results: MatrixResult[],
   ): Array<{ timestamp: number; value: number }> {

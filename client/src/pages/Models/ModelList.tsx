@@ -71,6 +71,19 @@ const ModelList: React.FC<ModelListProps> = ({
                     }`}
                   />
                 </div>
+                {m.pods && m.pods.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {m.pods.map((pod: string) => (
+                      <div
+                        key={pod}
+                        title={pod}
+                        className="truncate font-mono text-[11px] text-muted-foreground"
+                      >
+                        {pod}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

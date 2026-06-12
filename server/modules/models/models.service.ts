@@ -4,7 +4,8 @@ import {
   type PostgresJsDatabase,
 } from '@lark-apaas/fullstack-nestjs-core';
 import { model, metricData } from '@server/database/schema';
-import { eq, ilike, and, gte, lt, isNull } from 'drizzle-orm';
+import { eq, ilike, and, gte, lt } from 'drizzle-orm';
+import { PrometheusService } from '@server/modules/prometheus/prometheus.service';
 import type {
   ModelListResponse,
   ModelMetricsResponse,
@@ -18,6 +19,7 @@ export class ModelsService {
   constructor(
     @Inject(DRIZZLE_DATABASE)
     private readonly db: PostgresJsDatabase,
+    private readonly prometheusService: PrometheusService,
   ) {}
 
   private computeCounterDeltas(
@@ -102,6 +104,9 @@ export class ModelsService {
 
     const rows = await query;
 
+    // 查询每个 model_name 当前关联的 Pod 名称（来自 vllm metric label）
+    const podsByModel = await this.prometheusService.getModelPods();
+
     const start24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const metricRows = await this.db
       .select({
@@ -147,6 +152,7 @@ export class ModelsService {
         apiCalls: Math.round(apiCalls),
         successRate: Number(successRate.toFixed(2)),
         avgLatency: Number(avgLatency.toFixed(1)),
+        pods: podsByModel[row.name] ?? [],
       };
     });
 
@@ -276,33 +282,33 @@ export class ModelsService {
       output: Math.round(m['generation_tokens_total'] ?? 0),
     }));
 
-    const globalRows = await this.db
-      .select({
-        metricType: metricData.metricType,
-        value: metricData.value,
-      })
-      .from(metricData)
-      .where(
-        and(
-          isNull(metricData.modelId),
-          gte(metricData.recordedAt, start),
-          lt(metricData.recordedAt, end),
-        ),
-      );
-
-    let gpuUtil = 0;
-    let gpuMemUsed = 0;
-    let gpuMemFree = 0;
-    for (const row of globalRows) {
-      const val = parseFloat(row.value);
-      if (isNaN(val)) continue;
-      if (row.metricType === 'gpu_util') gpuUtil = val;
-      if (row.metricType === 'gpu_mem_used') gpuMemUsed = val;
-      if (row.metricType === 'gpu_mem_free') gpuMemFree = val;
+    // GPU 资源使用：基于该模型实际占用的 Pod 计算（与 timeRange 无关，反映当下值）。
+    // 显存：跨多 Pod / 多卡 sum；算力：跨多 Pod 取平均。
+    const [podsByModel, podGpuMem, podGpuUtil] = await Promise.all([
+      this.prometheusService.getModelPods(),
+      this.prometheusService.getPodGpuMemory(),
+      this.prometheusService.getPodGpuUtilization(),
+    ]);
+    const ownPods = podsByModel[modelName] ?? [];
+    let allocatedBytes = 0;
+    let usedBytes = 0;
+    let computeSum = 0;
+    let computeCount = 0;
+    for (const pod of ownPods) {
+      const m = podGpuMem[pod];
+      if (m) {
+        allocatedBytes += m.allocatedBytes;
+        usedBytes += m.usedBytes;
+      }
+      const u = podGpuUtil[pod];
+      if (typeof u === 'number') {
+        computeSum += u;
+        computeCount += 1;
+      }
     }
-    const gpuMemTotal = gpuMemUsed + gpuMemFree;
-    const gpuMemPercent =
-      gpuMemTotal > 0 ? (gpuMemUsed / gpuMemTotal) * 100 : 0;
+    const memoryAllocatedPercent =
+      allocatedBytes > 0 ? (usedBytes / allocatedBytes) * 100 : 0;
+    const computePercent = computeCount > 0 ? computeSum / computeCount : 0;
 
     return {
       callQuality: {
@@ -324,8 +330,10 @@ export class ModelsService {
         dailyTrend,
       },
       resourceUsage: {
-        gpu: Number(gpuUtil.toFixed(1)),
-        gpuMemory: Number(gpuMemPercent.toFixed(1)),
+        memoryAllocatedPercent: Number(memoryAllocatedPercent.toFixed(1)),
+        memoryUsedBytes: usedBytes,
+        memoryAllocatedBytes: allocatedBytes,
+        computePercent: Number(computePercent.toFixed(1)),
       },
     };
   }

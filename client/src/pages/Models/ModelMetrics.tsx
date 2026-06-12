@@ -96,6 +96,16 @@ function buildAxisTooltip<T extends { timestamp: string }>(
   };
 }
 
+// 字节数转换为 GiB / MiB 等可读字符串
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0';
+  const GIB = 1024 ** 3;
+  const MIB = 1024 ** 2;
+  if (bytes >= GIB) return `${(bytes / GIB).toFixed(1)} GiB`;
+  if (bytes >= MIB) return `${(bytes / MIB).toFixed(1)} MiB`;
+  return `${bytes} B`;
+}
+
 function createGaugeOption(value: number, name: string): EChartsOption {
   return {
     tooltip: { formatter: `${name}: {c}%` },
@@ -358,21 +368,35 @@ const ModelMetrics: React.FC<ModelMetricsProps> = ({
         </CardHeader>
         <CardContent className="p-3 pt-0">
           <div className="grid grid-cols-2 gap-3">
-            <ReactECharts
-              option={createGaugeOption(metrics.resourceUsage.gpu, '算力')}
-              notMerge
-              lazyUpdate
-              style={{ height: 180 }}
-            />
-            <ReactECharts
-              option={createGaugeOption(
-                metrics.resourceUsage.gpuMemory,
-                '显存',
-              )}
-              notMerge
-              lazyUpdate
-              style={{ height: 180 }}
-            />
+            <div>
+              <ReactECharts
+                option={createGaugeOption(
+                  metrics.resourceUsage.memoryAllocatedPercent,
+                  '显存使用率',
+                )}
+                notMerge
+                lazyUpdate
+                style={{ height: 180 }}
+              />
+              <div className="text-center font-mono text-xs text-muted-foreground">
+                {formatBytes(metrics.resourceUsage.memoryUsedBytes)} /{' '}
+                {formatBytes(metrics.resourceUsage.memoryAllocatedBytes)}
+              </div>
+            </div>
+            <div>
+              <ReactECharts
+                option={createGaugeOption(
+                  metrics.resourceUsage.computePercent,
+                  '算力使用率',
+                )}
+                notMerge
+                lazyUpdate
+                style={{ height: 180 }}
+              />
+              <div className="text-center font-mono text-xs text-muted-foreground">
+                {metrics.resourceUsage.computePercent.toFixed(1)} %
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
