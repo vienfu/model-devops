@@ -7,7 +7,6 @@ import {
   LogOut,
   ChevronsUpDown,
 } from "lucide-react";
-import { useAppInfo } from "@lark-apaas/client-toolkit/hooks/useAppInfo";
 import { useCurrentUserProfile } from "@lark-apaas/client-toolkit/hooks/useCurrentUserProfile";
 import { getDataloom } from "@lark-apaas/client-toolkit/dataloom";
 import { logger } from "@lark-apaas/client-toolkit/logger";
@@ -49,7 +48,6 @@ const navItems = [
 
 const LayoutContent: React.FC = () => {
   const { pathname } = useLocation();
-  const { appName } = useAppInfo();
   const userInfo = useCurrentUserProfile();
 
   const activeTitle =
@@ -91,7 +89,7 @@ const LayoutContent: React.FC = () => {
                   </div>
                   <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
                     <span className="font-semibold text-sm text-sidebar-accent-foreground">
-                      {appName || "模型运营中心"}
+                      模型运营数据后台
                     </span>
                     <span className="text-xs text-sidebar-foreground">
                       Model Ops
