@@ -92,7 +92,7 @@ const LayoutContent: React.FC = () => {
                       模型运营数据后台
                     </span>
                     <span className="text-xs text-sidebar-foreground">
-                      Model Ops
+                      Model DevOps
                     </span>
                   </div>
                 </Link>
